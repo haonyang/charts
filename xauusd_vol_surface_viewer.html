@@ -7,11 +7,11 @@
 <style>
   :root {
     --bg:#fff;--bg2:#f5f5f0;--text:#3d3d3a;--text2:#73726c;--text3:#9c9a92;
-    --grid:rgba(0,0,0,0.05);--axis:rgba(0,0,0,0.15);--border:rgba(0,0,0,0.1);
+    --grid:rgba(0,0,0,0.2);--axis:rgba(0,0,0,0.4);--border:rgba(0,0,0,0.1);
   }
   @media(prefers-color-scheme:dark){:root{
     --bg:#1a1a18;--bg2:#2c2c2a;--text:#c2c0b6;--text2:#9c9a92;--text3:#73726c;
-    --grid:rgba(255,255,255,0.06);--axis:rgba(255,255,255,0.18);--border:rgba(255,255,255,0.1);
+    --grid:rgba(255,255,255,0.25);--axis:rgba(255,255,255,0.5);--border:rgba(255,255,255,0.1);
   }}
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{height:100%;overflow:hidden;}
@@ -161,7 +161,7 @@ function getTLabel(){var sel=document.getElementById('tenorSelect').value;return
 function drawSmile(svgId,T,label,extraLines){
   var svg=document.getElementById(svgId);
   var dark=matchMedia('(prefers-color-scheme:dark)').matches;
-  var textCol=dark?'#c2c0b6':'#3d3d3a',gridCol=dark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.05)',axisCol=dark?'rgba(255,255,255,0.18)':'rgba(0,0,0,0.15)';
+  var textCol=dark?'#c2c0b6':'#3d3d3a',gridCol=dark?'rgba(255,255,255,0.25)':'rgba(0,0,0,0.2)',axisCol=dark?'rgba(255,255,255,0.5)':'rgba(0,0,0,0.4)';
   var L=72,R=660,Top=30,B=350;
   var vols=interpAtT(T),atmVol=vols[2];
   var yMin=19,yMax=25.5;
@@ -214,7 +214,7 @@ function render3d(){
   var r=cv.parentElement.getBoundingClientRect();var dpr=window.devicePixelRatio||1;
   cv.width=r.width*dpr;cv.height=r.height*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,r.width,r.height);
-  var dark=matchMedia('(prefers-color-scheme:dark)').matches;var textC=dark?'#c2c0b6':'#3d3d3a';var gridC=dark?'rgba(255,255,255,0.15)':'rgba(0,0,0,0.10)';
+  var dark=matchMedia('(prefers-color-scheme:dark)').matches;var textC=dark?'#c2c0b6':'#3d3d3a';var gridC=dark?'rgba(255,255,255,0.3)':'rgba(0,0,0,0.2)';
   var showSlice=document.getElementById('show3dSlice').checked,showGrid=document.getElementById('show3dGrid').checked,showFill=document.getElementById('show3dFill').checked,showDots=document.getElementById('show3dDots').checked;
 
   // Floor grid
