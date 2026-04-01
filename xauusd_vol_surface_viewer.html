@@ -243,7 +243,7 @@ function render3d(){
 }
 
 window.addEventListener('resize',function(){var ai=-1;document.querySelectorAll('.view').forEach(function(v,i){if(v.classList.contains('active'))ai=i;});if(ai===2)render3d();});
-drawSingle();
+requestAnimationFrame(function(){ setTimeout(drawSingle, 50); });
 </script>
 </body>
 </html>

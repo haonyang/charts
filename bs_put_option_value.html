@@ -219,7 +219,7 @@ function updateSpot(e){
 
 document.getElementById('sliderT').addEventListener('input',draw);
 document.getElementById('sliderV').addEventListener('input',draw);
-draw();
+requestAnimationFrame(function(){ setTimeout(draw, 50); });
 </script>
 </body>
 </html>
