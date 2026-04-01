@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BS Put Option Value vs Underlying Price</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg2: #f5f5f0;
+    --text: #3d3d3a;
+    --text2: #73726c;
+    --text3: #9c9a92;
+    --border: rgba(0,0,0,0.1);
+    --grid: rgba(0,0,0,0.05);
+    --axis: rgba(0,0,0,0.15);
+    --intr: rgba(0,0,0,0.2);
+    --tv-fill: rgba(30,158,117,0.1);
+    --tv-text: #0F6E56;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --bg2: #2c2c2a;
+      --text: #c2c0b6;
+      --text2: #9c9a92;
+      --text3: #73726c;
+      --border: rgba(255,255,255,0.1);
+      --grid: rgba(255,255,255,0.07);
+      --axis: rgba(255,255,255,0.2);
+      --intr: rgba(255,255,255,0.25);
+      --tv-fill: rgba(30,158,117,0.12);
+      --tv-text: #5DCAA5;
+    }
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); padding: 8px 20px; max-width: 720px; margin: 0 auto; -webkit-user-select: none; user-select: none; display:flex; flex-direction:column; }
+  .ctrl-row { display:flex; align-items:center; gap:12px; margin:0 0 4px; font-size:13px; color:var(--text2); flex-shrink:0; }
+  .ctrl-row label { min-width:60px; }
+  .ctrl-row input[type=range] { flex:1; height:4px; -webkit-appearance:none; appearance:none; background:var(--border); border-radius:2px; outline:none; }
+  .ctrl-row input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:var(--bg); border:2px solid var(--text3); cursor:pointer; }
+  .ctrl-row .val { min-width:52px; text-align:right; font-weight:500; font-size:13px; font-family:monospace; color:var(--text); }
+  #chart { flex:1; min-height:0; }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; margin:4px 0 0; font-size:12px; color:var(--text2); flex-shrink:0; }
+  .legend-item { display:flex; align-items:center; gap:5px; }
+</style>
+</head>
+<body>
+
+<div class="ctrl-row">
+  <label>Time (T)</label>
+  <input type="range" id="sliderT" min="0.01" max="2" step="0.01" value="0.73">
+  <span class="val" id="valT">0.73y</span>
+</div>
+<div class="ctrl-row">
+  <label>Vol (σ)</label>
+  <input type="range" id="sliderV" min="5" max="50" step="1" value="20">
+  <span class="val" id="valV">20%</span>
+</div>
+
+<svg id="chart" width="100%" viewBox="0 0 680 440" style="display:block;"></svg>
+
+<div class="legend">
+  <div class="legend-item"><div style="width:20px;height:3px;background:var(--intr)"></div>Intrinsic value: max(K−S, 0)</div>
+  <div class="legend-item"><div style="width:20px;height:3px;background:#D85A30"></div>BS option value (with time value)</div>
+  <div class="legend-item"><div style="width:20px;height:0;border-top:2px dashed #7F77DD"></div>Delta tangent (slope = Δ)</div>
+  <div class="legend-item"><div style="width:14px;height:14px;background:var(--tv-fill);border-radius:2px"></div>Time value = BS − intrinsic</div>
+</div>
+
+<script>
+const K=100, r=0.03;
+let spotS=90;
+
+function N(x){
+  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+  const sign=x<0?-1:1;
+  x=Math.abs(x)/Math.SQRT2;
+  const t=1/(1+p*x);
+  const y=1-((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+  return 0.5*(1+sign*y);
+}
+
+function bsPut(S,vol,T){
+  if(T<0.001) return Math.max(K-S,0);
+  const F=S*Math.exp(r*T);
+  const d1=(Math.log(F/K)+0.5*vol*vol*T)/(vol*Math.sqrt(T));
+  const d2=d1-vol*Math.sqrt(T);
+  return K*Math.exp(-r*T)*N(-d2)-S*N(-d1);
+}
+function bsPutDelta(S,vol,T){
+  if(T<0.001) return S<K?-1:0;
+  const F=S*Math.exp(r*T);
+  const d1=(Math.log(F/K)+0.5*vol*vol*T)/(vol*Math.sqrt(T));
+  return N(d1)-1;
+}
+
+function draw(){
+  const T=parseFloat(document.getElementById('sliderT').value);
+  const vol=parseFloat(document.getElementById('sliderV').value)/100;
+  document.getElementById('valT').textContent=T.toFixed(2)+'y';
+  document.getElementById('valV').textContent=Math.round(vol*100)+'%';
+
+  const svg=document.getElementById('chart');
+  const dark=matchMedia('(prefers-color-scheme:dark)').matches;
+  const textCol=getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+  const gridCol=getComputedStyle(document.documentElement).getPropertyValue('--grid').trim();
+  const axisCol=getComputedStyle(document.documentElement).getPropertyValue('--axis').trim();
+  const intrCol=getComputedStyle(document.documentElement).getPropertyValue('--intr').trim();
+  const tvFill=getComputedStyle(document.documentElement).getPropertyValue('--tv-fill').trim();
+  const tvText=getComputedStyle(document.documentElement).getPropertyValue('--tv-text').trim();
+
+  const L=70,R=640,Top=30,B=380;
+  const sMin=40,sMax=180,vMax=90;
+  const sx=s=>L+(s-sMin)/(sMax-sMin)*(R-L);
+  const sy=v=>B-v/vMax*(B-Top);
+
+  let h='';
+
+  for(let v=0;v<=80;v+=20){
+    h+=`<line x1="${L}" y1="${sy(v)}" x2="${R}" y2="${sy(v)}" stroke="${gridCol}" stroke-width="0.5"/>`;
+    h+=`<text x="${L-10}" y="${sy(v)+1}" text-anchor="end" fill="${textCol}" font-size="11" font-family="sans-serif" dominant-baseline="central">${v}</text>`;
+  }
+  for(let s=40;s<=180;s+=20){
+    h+=`<line x1="${sx(s)}" y1="${Top}" x2="${sx(s)}" y2="${B}" stroke="${gridCol}" stroke-width="0.5"/>`;
+    h+=`<text x="${sx(s)}" y="${B+18}" text-anchor="middle" fill="${textCol}" font-size="11" font-family="sans-serif">${s}</text>`;
+  }
+  h+=`<line x1="${L}" y1="${B}" x2="${R}" y2="${B}" stroke="${axisCol}" stroke-width="1"/>`;
+  h+=`<line x1="${L}" y1="${Top}" x2="${L}" y2="${B}" stroke="${axisCol}" stroke-width="1"/>`;
+  h+=`<text x="${(L+R)/2}" y="${B+38}" text-anchor="middle" fill="${textCol}" font-size="13" font-family="sans-serif">Underlying price (S)</text>`;
+  h+=`<text x="16" y="${(Top+B)/2}" text-anchor="middle" fill="${textCol}" font-size="13" font-family="sans-serif" transform="rotate(-90,16,${(Top+B)/2})">Option value</text>`;
+
+  h+=`<line x1="${sx(K)}" y1="${Top}" x2="${sx(K)}" y2="${B}" stroke="${textCol}" stroke-width="0.5" stroke-dasharray="4 3" opacity="0.3"/>`;
+  h+=`<text x="${sx(K)}" y="${Top-8}" text-anchor="middle" fill="${textCol}" font-size="11" font-family="sans-serif" opacity="0.6">K=${K}</text>`;
+
+  const n=200;
+  const pts=[];
+  const intrPts=[];
+  for(let i=0;i<=n;i++){
+    const s=sMin+(sMax-sMin)*i/n;
+    const p=bsPut(s,vol,T);
+    const intr=Math.max(K-s,0);
+    pts.push({s,c:p});
+    intrPts.push({s,v:intr});
+  }
+
+  let tvPath='';
+  for(let i=0;i<=n;i++){
+    const px=sx(pts[i].s).toFixed(1);
+    const pyBs=sy(Math.min(pts[i].c,vMax)).toFixed(1);
+    tvPath+=(i===0?'M':'L')+px+' '+pyBs;
+  }
+  for(let i=n;i>=0;i--){
+    const px=sx(intrPts[i].s).toFixed(1);
+    const pyIn=sy(Math.min(intrPts[i].v,vMax)).toFixed(1);
+    tvPath+='L'+px+' '+pyIn;
+  }
+  tvPath+='Z';
+  h+=`<path d="${tvPath}" fill="${tvFill}" stroke="none"/>`;
+
+  let intrPath='';
+  let bsPath='';
+  for(let i=0;i<=n;i++){
+    const px=sx(pts[i].s).toFixed(1);
+    const pyBs=sy(Math.min(pts[i].c,vMax)).toFixed(1);
+    const pyIn=sy(Math.min(intrPts[i].v,vMax)).toFixed(1);
+    bsPath+=(i===0?'M':'L')+px+' '+pyBs;
+    intrPath+=(i===0?'M':'L')+px+' '+pyIn;
+  }
+  h+=`<path d="${intrPath}" fill="none" stroke="${intrCol}" stroke-width="2"/>`;
+  h+=`<path d="${bsPath}" fill="none" stroke="#D85A30" stroke-width="2.5" stroke-linecap="round"/>`;
+
+  const delta=bsPutDelta(spotS,vol,T);
+  const pVal=bsPut(spotS,vol,T);
+  const tangentLen=35;
+  const tx1=spotS-tangentLen, tx2=spotS+tangentLen;
+  const ty1=pVal-delta*tangentLen, ty2=pVal+delta*tangentLen;
+  h+=`<line x1="${sx(tx1)}" y1="${sy(Math.max(ty1,0))}" x2="${sx(tx2)}" y2="${sy(Math.max(ty2,0))}" stroke="#7F77DD" stroke-width="1.5" stroke-dasharray="5 3"/>`;
+  h+=`<circle cx="${sx(spotS)}" cy="${sy(pVal)}" r="5" fill="#D85A30" stroke="${dark?'#1a1a18':'#ffffff'}" stroke-width="2"/>`;
+  h+=`<text x="${sx(spotS)+10}" y="${sy(pVal)-12}" fill="${textCol}" font-size="12" font-family="sans-serif">S=${Math.round(spotS)}, Δ=${delta.toFixed(2)}</text>`;
+
+  const tvMaxIdx=pts.reduce((best,p,i)=>(p.c-intrPts[i].v)>(pts[best].c-intrPts[best].v)?i:best,0);
+  const tvMaxS=pts[tvMaxIdx].s;
+  const tvMaxVal=pts[tvMaxIdx].c-intrPts[tvMaxIdx].v;
+  if(tvMaxVal>2){
+    const mx=sx(tvMaxS), my1=sy(intrPts[tvMaxIdx].v), my2=sy(pts[tvMaxIdx].c);
+    const mid=(my1+my2)/2;
+    h+=`<text x="${mx+6}" y="${mid+1}" fill="${tvText}" font-size="11" font-family="sans-serif" dominant-baseline="central" opacity="0.8">time value</text>`;
+  }
+
+  const zones=[
+    {x:sx(60),label:'Deep ITM',sub:'Δ ≈ −1'},
+    {x:sx(K),label:'ATM',sub:'Δ ≈ −0.5'},
+    {x:sx(150),label:'Deep OTM',sub:'Δ ≈ 0'},
+  ];
+  for(const z of zones){
+    h+=`<text x="${z.x}" y="${B+55}" text-anchor="middle" fill="${textCol}" font-size="11" font-family="sans-serif" opacity="0.6">${z.label}</text>`;
+    h+=`<text x="${z.x}" y="${B+69}" text-anchor="middle" fill="${textCol}" font-size="11" font-family="monospace" opacity="0.45">${z.sub}</text>`;
+  }
+
+  svg.innerHTML=h;
+}
+
+const chart=document.getElementById('chart');
+let dragging=false;
+chart.addEventListener('pointerdown',e=>{dragging=true;chart.setPointerCapture(e.pointerId);updateSpot(e);});
+chart.addEventListener('pointermove',e=>{if(dragging)updateSpot(e);});
+chart.addEventListener('pointerup',e=>{dragging=false;chart.releasePointerCapture(e.pointerId);});
+chart.addEventListener('lostpointercapture',()=>{dragging=false;});
+
+function updateSpot(e){
+  const rect=chart.getBoundingClientRect();
+  const xFrac=(e.clientX-rect.left)/rect.width;
+  const L=70/680,R=640/680;
+  const t=Math.max(0,Math.min(1,(xFrac-L)/(R-L)));
+  spotS=40+t*140;
+  draw();
+}
+
+document.getElementById('sliderT').addEventListener('input',draw);
+document.getElementById('sliderV').addEventListener('input',draw);
+draw();
+</script>
+</body>
+</html>
