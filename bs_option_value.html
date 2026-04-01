@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BS Option Value vs Underlying Price</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg2: #f5f5f0;
+    --text: #3d3d3a;
+    --text2: #73726c;
+    --text3: #9c9a92;
+    --border: rgba(0,0,0,0.1);
+    --grid: rgba(0,0,0,0.05);
+    --axis: rgba(0,0,0,0.15);
+    --intr: rgba(0,0,0,0.2);
+    --tv-fill: rgba(30,158,117,0.1);
+    --tv-text: #0F6E56;
+    --call: #D85A30;
+    --put: #2E86C1;
+    --tab-bg: #f0efea;
+    --tab-active: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --bg2: #2c2c2a;
+      --text: #c2c0b6;
+      --text2: #9c9a92;
+      --text3: #73726c;
+      --border: rgba(255,255,255,0.1);
+      --grid: rgba(255,255,255,0.07);
+      --axis: rgba(255,255,255,0.2);
+      --intr: rgba(255,255,255,0.25);
+      --tv-fill: rgba(30,158,117,0.12);
+      --tv-text: #5DCAA5;
+      --call: #E8724A;
+      --put: #5DADE2;
+      --tab-bg: #2c2c2a;
+      --tab-active: #3d3d3a;
+    }
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); padding: 8px 20px; max-width: 720px; margin: 0 auto; -webkit-user-select: none; user-select: none; display:flex; flex-direction:column; }
+  .tabs { display:flex; gap:2px; margin:0 0 8px; background:var(--tab-bg); border-radius:8px; padding:3px; flex-shrink:0; }
+  .tab { flex:1; text-align:center; padding:6px 0; font-size:13px; font-weight:500; color:var(--text2); border-radius:6px; cursor:pointer; transition: all 0.15s; }
+  .tab:hover { color:var(--text); }
+  .tab.active { background:var(--tab-active); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+  .ctrl-row { display:flex; align-items:center; gap:12px; margin:0 0 4px; font-size:13px; color:var(--text2); flex-shrink:0; }
+  .ctrl-row label { min-width:60px; }
+  .ctrl-row input[type=range] { flex:1; height:4px; -webkit-appearance:none; appearance:none; background:var(--border); border-radius:2px; outline:none; }
+  .ctrl-row input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:var(--bg); border:2px solid var(--text3); cursor:pointer; }
+  .ctrl-row .val { min-width:52px; text-align:right; font-weight:500; font-size:13px; font-family:monospace; color:var(--text); }
+  #chart { flex:1; min-height:0; }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; margin:4px 0 0; font-size:12px; color:var(--text2); flex-shrink:0; }
+  .legend-item { display:flex; align-items:center; gap:5px; }
+</style>
+</head>
+<body>
+
+<div class="tabs">
+  <div class="tab active" data-mode="call">Call</div>
+  <div class="tab" data-mode="put">Put</div>
+  <div class="tab" data-mode="both">Both</div>
+</div>
+
+<div class="ctrl-row">
+  <label>Time (T)</label>
+  <input type="range" id="sliderT" min="0.01" max="2" step="0.01" value="0.73">
+  <span class="val" id="valT">0.73y</span>
+</div>
+<div class="ctrl-row">
+  <label>Vol (σ)</label>
+  <input type="range" id="sliderV" min="5" max="50" step="1" value="20">
+  <span class="val" id="valV">20%</span>
+</div>
+
+<svg id="chart" width="100%" viewBox="0 0 680 440" style="display:block;"></svg>
+
+<div class="legend" id="legend"></div>
+
+<script>
+const K=100, r=0.03;
+let spotS=110, mode='call';
+
+function N(x){
+  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+  const sign=x<0?-1:1;
+  x=Math.abs(x)/Math.SQRT2;
+  const t=1/(1+p*x);
+  const y=1-((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+  return 0.5*(1+sign*y);
+}
+
+function bsCall(S,vol,T){
+  if(T<0.001) return Math.max(S-K,0);
+  const F=S*Math.exp(r*T);
+  const d1=(Math.log(F/K)+0.5*vol*vol*T)/(vol*Math.sqrt(T));
+  const d2=d1-vol*Math.sqrt(T);
+  return S*N(d1)-K*Math.exp(-r*T)*N(d2);
+}
+function bsPut(S,vol,T){
+  if(T<0.001) return Math.max(K-S,0);
+  const F=S*Math.exp(r*T);
+  const d1=(Math.log(F/K)+0.5*vol*vol*T)/(vol*Math.sqrt(T));
+  const d2=d1-vol*Math.sqrt(T);
+  return K*Math.exp(-r*T)*N(-d2)-S*N(-d1);
+}
+function bsCallDelta(S,vol,T){
+  if(T<0.001) return S>K?1:0;
+  const F=S*Math.exp(r*T);
+  const d1=(Math.log(F/K)+0.5*vol*vol*T)/(vol*Math.sqrt(T));
+  return N(d1);
+}
+function bsPutDelta(S,vol,T){
+  if(T<0.001) return S<K?-1:0;
+  const F=S*Math.exp(r*T);
+  const d1=(Math.log(F/K)+0.5*vol*vol*T)/(vol*Math.sqrt(T));
+  return N(d1)-1;
+}
+
+function updateLegend(){
+  const cs=s=>getComputedStyle(document.documentElement).getPropertyValue(s).trim();
+  const callCol=cs('--call'), putCol=cs('--put'), intrCol=cs('--intr'), tvFill=cs('--tv-fill');
+  let items='';
+  if(mode==='call'){
+    items+=`<div class="legend-item"><div style="width:20px;height:3px;background:${intrCol}"></div>Intrinsic: max(S−K, 0)</div>`;
+    items+=`<div class="legend-item"><div style="width:20px;height:3px;background:${callCol}"></div>Call value</div>`;
+    items+=`<div class="legend-item"><div style="width:20px;height:0;border-top:2px dashed #7F77DD"></div>Delta tangent</div>`;
+    items+=`<div class="legend-item"><div style="width:14px;height:14px;background:${tvFill};border-radius:2px"></div>Time value</div>`;
+  } else if(mode==='put'){
+    items+=`<div class="legend-item"><div style="width:20px;height:3px;background:${intrCol}"></div>Intrinsic: max(K−S, 0)</div>`;
+    items+=`<div class="legend-item"><div style="width:20px;height:3px;background:${putCol}"></div>Put value</div>`;
+    items+=`<div class="legend-item"><div style="width:20px;height:0;border-top:2px dashed #7F77DD"></div>Delta tangent</div>`;
+    items+=`<div class="legend-item"><div style="width:14px;height:14px;background:${tvFill};border-radius:2px"></div>Time value</div>`;
+  } else {
+    items+=`<div class="legend-item"><div style="width:20px;height:3px;background:${callCol}"></div>Call value</div>`;
+    items+=`<div class="legend-item"><div style="width:20px;height:3px;background:${putCol}"></div>Put value</div>`;
+    items+=`<div class="legend-item"><div style="width:20px;height:3px;background:${intrCol}"></div>Call intrinsic</div>`;
+    items+=`<div class="legend-item"><div style="width:20px;height:3px;background:${intrCol};opacity:0.5"></div>Put intrinsic</div>`;
+  }
+  document.getElementById('legend').innerHTML=items;
+}
+
+function draw(){
+  const T=parseFloat(document.getElementById('sliderT').value);
+  const vol=parseFloat(document.getElementById('sliderV').value)/100;
+  document.getElementById('valT').textContent=T.toFixed(2)+'y';
+  document.getElementById('valV').textContent=Math.round(vol*100)+'%';
+
+  const svg=document.getElementById('chart');
+  const dark=matchMedia('(prefers-color-scheme:dark)').matches;
+  const cs=s=>getComputedStyle(document.documentElement).getPropertyValue(s).trim();
+  const textCol=cs('--text'), gridCol=cs('--grid'), axisCol=cs('--axis');
+  const intrCol=cs('--intr'), tvFill=cs('--tv-fill'), tvText=cs('--tv-text');
+  const callCol=cs('--call'), putCol=cs('--put');
+
+  const L=70,R=640,Top=30,B=380;
+  const sMin=40,sMax=180,vMax=90;
+  const sx=s=>L+(s-sMin)/(sMax-sMin)*(R-L);
+  const sy=v=>B-v/vMax*(B-Top);
+
+  let h='';
+
+  for(let v=0;v<=80;v+=20){
+    h+=`<line x1="${L}" y1="${sy(v)}" x2="${R}" y2="${sy(v)}" stroke="${gridCol}" stroke-width="0.5"/>`;
+    h+=`<text x="${L-10}" y="${sy(v)+1}" text-anchor="end" fill="${textCol}" font-size="11" font-family="sans-serif" dominant-baseline="central">${v}</text>`;
+  }
+  for(let s=40;s<=180;s+=20){
+    h+=`<line x1="${sx(s)}" y1="${Top}" x2="${sx(s)}" y2="${B}" stroke="${gridCol}" stroke-width="0.5"/>`;
+    h+=`<text x="${sx(s)}" y="${B+18}" text-anchor="middle" fill="${textCol}" font-size="11" font-family="sans-serif">${s}</text>`;
+  }
+  h+=`<line x1="${L}" y1="${B}" x2="${R}" y2="${B}" stroke="${axisCol}" stroke-width="1"/>`;
+  h+=`<line x1="${L}" y1="${Top}" x2="${L}" y2="${B}" stroke="${axisCol}" stroke-width="1"/>`;
+  h+=`<text x="${(L+R)/2}" y="${B+38}" text-anchor="middle" fill="${textCol}" font-size="13" font-family="sans-serif">Underlying price (S)</text>`;
+  h+=`<text x="16" y="${(Top+B)/2}" text-anchor="middle" fill="${textCol}" font-size="13" font-family="sans-serif" transform="rotate(-90,16,${(Top+B)/2})">Option value</text>`;
+  h+=`<line x1="${sx(K)}" y1="${Top}" x2="${sx(K)}" y2="${B}" stroke="${textCol}" stroke-width="0.5" stroke-dasharray="4 3" opacity="0.3"/>`;
+  h+=`<text x="${sx(K)}" y="${Top-8}" text-anchor="middle" fill="${textCol}" font-size="11" font-family="sans-serif" opacity="0.6">K=${K}</text>`;
+
+  const n=200;
+  const callPts=[], putPts=[], callIntr=[], putIntr=[];
+  for(let i=0;i<=n;i++){
+    const s=sMin+(sMax-sMin)*i/n;
+    callPts.push({s,c:bsCall(s,vol,T)});
+    putPts.push({s,c:bsPut(s,vol,T)});
+    callIntr.push({s,v:Math.max(s-K,0)});
+    putIntr.push({s,v:Math.max(K-s,0)});
+  }
+
+  function buildPath(pts,key){
+    return pts.map((p,i)=>(i===0?'M':'L')+sx(p.s).toFixed(1)+' '+sy(Math.min(p[key],vMax)).toFixed(1)).join('');
+  }
+
+  function drawSingle(pts, intrPts, col, deltaFn, priceFn, isCall){
+    let out='';
+    let tvPath=buildPath(pts,'c');
+    for(let i=n;i>=0;i--) tvPath+='L'+sx(intrPts[i].s).toFixed(1)+' '+sy(Math.min(intrPts[i].v,vMax)).toFixed(1);
+    tvPath+='Z';
+    out+=`<path d="${tvPath}" fill="${tvFill}" stroke="none"/>`;
+    out+=`<path d="${buildPath(intrPts,'v')}" fill="none" stroke="${intrCol}" stroke-width="2"/>`;
+    out+=`<path d="${buildPath(pts,'c')}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round"/>`;
+
+    const delta=deltaFn(spotS,vol,T);
+    const val=priceFn(spotS,vol,T);
+    const tl=35;
+    const ty1=val-delta*tl, ty2=val+delta*tl;
+    out+=`<line x1="${sx(spotS-tl)}" y1="${sy(Math.max(ty1,0))}" x2="${sx(spotS+tl)}" y2="${sy(Math.max(ty2,0))}" stroke="#7F77DD" stroke-width="1.5" stroke-dasharray="5 3"/>`;
+    out+=`<circle cx="${sx(spotS)}" cy="${sy(val)}" r="5" fill="${col}" stroke="${dark?'#1a1a18':'#ffffff'}" stroke-width="2"/>`;
+    out+=`<text x="${sx(spotS)+10}" y="${sy(val)-12}" fill="${textCol}" font-size="12" font-family="sans-serif">S=${Math.round(spotS)}, Δ=${delta.toFixed(2)}</text>`;
+
+    const tvMaxIdx=pts.reduce((best,p,i)=>(p.c-intrPts[i].v)>(pts[best].c-intrPts[best].v)?i:best,0);
+    const tvMaxVal=pts[tvMaxIdx].c-intrPts[tvMaxIdx].v;
+    if(tvMaxVal>2){
+      const mx=sx(pts[tvMaxIdx].s), my1=sy(intrPts[tvMaxIdx].v), my2=sy(pts[tvMaxIdx].c);
+      out+=`<text x="${mx+6}" y="${(my1+my2)/2+1}" fill="${tvText}" font-size="11" font-family="sans-serif" dominant-baseline="central" opacity="0.8">time value</text>`;
+    }
+
+    if(isCall){
+      [{x:sx(60),l:'Deep OTM',s:'Δ ≈ 0'},{x:sx(K),l:'ATM',s:'Δ ≈ 0.5'},{x:sx(150),l:'Deep ITM',s:'Δ ≈ 1'}].forEach(z=>{
+        out+=`<text x="${z.x}" y="${B+55}" text-anchor="middle" fill="${textCol}" font-size="11" font-family="sans-serif" opacity="0.6">${z.l}</text>`;
+        out+=`<text x="${z.x}" y="${B+69}" text-anchor="middle" fill="${textCol}" font-size="11" font-family="monospace" opacity="0.45">${z.s}</text>`;
+      });
+    } else {
+      [{x:sx(60),l:'Deep ITM',s:'Δ ≈ −1'},{x:sx(K),l:'ATM',s:'Δ ≈ −0.5'},{x:sx(150),l:'Deep OTM',s:'Δ ≈ 0'}].forEach(z=>{
+        out+=`<text x="${z.x}" y="${B+55}" text-anchor="middle" fill="${textCol}" font-size="11" font-family="sans-serif" opacity="0.6">${z.l}</text>`;
+        out+=`<text x="${z.x}" y="${B+69}" text-anchor="middle" fill="${textCol}" font-size="11" font-family="monospace" opacity="0.45">${z.s}</text>`;
+      });
+    }
+    return out;
+  }
+
+  function drawBoth(){
+    let out='';
+    out+=`<path d="${buildPath(callIntr,'v')}" fill="none" stroke="${intrCol}" stroke-width="1.5"/>`;
+    out+=`<path d="${buildPath(putIntr,'v')}" fill="none" stroke="${intrCol}" stroke-width="1.5" stroke-dasharray="6 3"/>`;
+    out+=`<path d="${buildPath(callPts,'c')}" fill="none" stroke="${callCol}" stroke-width="2.5" stroke-linecap="round"/>`;
+    out+=`<path d="${buildPath(putPts,'c')}" fill="none" stroke="${putCol}" stroke-width="2.5" stroke-linecap="round"/>`;
+
+    const cVal=bsCall(spotS,vol,T), pVal=bsPut(spotS,vol,T);
+    const cD=bsCallDelta(spotS,vol,T), pD=bsPutDelta(spotS,vol,T);
+    out+=`<circle cx="${sx(spotS)}" cy="${sy(cVal)}" r="5" fill="${callCol}" stroke="${dark?'#1a1a18':'#ffffff'}" stroke-width="2"/>`;
+    out+=`<text x="${sx(spotS)+10}" y="${sy(cVal)-12}" fill="${textCol}" font-size="12" font-family="sans-serif">Call: ${cVal.toFixed(1)}, Δ=${cD.toFixed(2)}</text>`;
+    out+=`<circle cx="${sx(spotS)}" cy="${sy(pVal)}" r="5" fill="${putCol}" stroke="${dark?'#1a1a18':'#ffffff'}" stroke-width="2"/>`;
+    out+=`<text x="${sx(spotS)+10}" y="${sy(pVal)+18}" fill="${textCol}" font-size="12" font-family="sans-serif">Put: ${pVal.toFixed(1)}, Δ=${pD.toFixed(2)}</text>`;
+    out+=`<text x="${R}" y="${Top+10}" text-anchor="end" fill="${textCol}" font-size="11" font-family="sans-serif" opacity="0.5">S=${Math.round(spotS)}  C−P=${(cVal-pVal).toFixed(1)}  S−Ke⁻ʳᵀ=${(spotS-K*Math.exp(-r*T)).toFixed(1)}</text>`;
+    return out;
+  }
+
+  if(mode==='call') h+=drawSingle(callPts, callIntr, callCol, bsCallDelta, bsCall, true);
+  else if(mode==='put') h+=drawSingle(putPts, putIntr, putCol, bsPutDelta, bsPut, false);
+  else h+=drawBoth();
+
+  svg.innerHTML=h;
+}
+
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    mode=tab.dataset.mode;
+    if(mode==='call') spotS=110;
+    else if(mode==='put') spotS=90;
+    updateLegend();
+    draw();
+  });
+});
+
+const chart=document.getElementById('chart');
+let dragging=false;
+chart.addEventListener('pointerdown',e=>{dragging=true;chart.setPointerCapture(e.pointerId);updateSpot(e);});
+chart.addEventListener('pointermove',e=>{if(dragging)updateSpot(e);});
+chart.addEventListener('pointerup',e=>{dragging=false;chart.releasePointerCapture(e.pointerId);});
+chart.addEventListener('lostpointercapture',()=>{dragging=false;});
+
+function updateSpot(e){
+  const rect=chart.getBoundingClientRect();
+  const xFrac=(e.clientX-rect.left)/rect.width;
+  const Lf=70/680,Rf=640/680;
+  const t=Math.max(0,Math.min(1,(xFrac-Lf)/(Rf-Lf)));
+  spotS=40+t*140;
+  draw();
+}
+
+document.getElementById('sliderT').addEventListener('input',draw);
+document.getElementById('sliderV').addEventListener('input',draw);
+updateLegend();
+draw();
+</script>
+</body>
+</html>
