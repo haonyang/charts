@@ -206,7 +206,7 @@ cv.addEventListener('pointerdown',function(e){dragging3d=true;lastMx=e.clientX;l
 cv.addEventListener('pointermove',function(e){if(!dragging3d)return;rotY+=(e.clientX-lastMx)*0.007;rotX+=(e.clientY-lastMy)*0.007;rotX=Math.max(-1.3,Math.min(-0.1,rotX));lastMx=e.clientX;lastMy=e.clientY;render3d();});
 cv.addEventListener('pointerup',function(){dragging3d=false;});
 
-function proj(x,y,z){var cy=Math.cos(rotY),sy2=Math.sin(rotY),cx=Math.cos(rotX),sx=Math.sin(rotX);var px=x*cy-z*sy2;var pz=x*sy2+z*cy;var py=y*cx-pz*sx;pz=y*sx+pz*cx;var r=cv.parentElement.getBoundingClientRect();var sc=Math.min(r.width,r.height)*1.05/(pz+5);return{x:r.width/2+px*sc,y:r.height/2-py*sc,z:pz};}
+function proj(x,y,z){var cy=Math.cos(rotY),sy2=Math.sin(rotY),cx=Math.cos(rotX),sx=Math.sin(rotX);var px=x*cy-z*sy2;var pz=x*sy2+z*cy;var py=y*cx-pz*sx;pz=y*sx+pz*cx;var r=cv.parentElement.getBoundingClientRect();var sc=Math.min(r.width,r.height)*1.45/(pz+5);return{x:r.width/2+px*sc,y:r.height/2-py*sc,z:pz};}
 function vColor(v,a){var t=Math.max(0,Math.min(1,(v-19)/5.5));return'rgba('+Math.round(50+t*180)+','+Math.round(135-t*75)+','+Math.round(210-t*165)+','+a+')';}
 function toW(tVal,dVal,vVal){var tMin=tenorYF[0],tMax=tenorYF[7];return{x:(dVal-0.10)/0.80*2-1,y:(vVal-19)/6*1.2-0.3,z:(tVal-tMin)/(tMax-tMin)*2-1};}
 
