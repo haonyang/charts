@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vol Surface Delta Convention → Strike Mapping</title>
+<title>XAUUSD Vol Surface: Delta → Strike Mapping</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -52,18 +52,18 @@
 
 <div class="ctrl-row">
   <label>Spot (S)</label>
-  <input type="range" id="sliderS" min="60" max="160" step="1" value="100">
-  <span class="val" id="valS">100</span>
+  <input type="range" id="sliderS" min="2400" max="3800" step="10" value="3100">
+  <span class="val" id="valS">3100</span>
 </div>
 <div class="ctrl-row">
   <label>Time (T)</label>
-  <input type="range" id="sliderT" min="0.01" max="2" step="0.01" value="0.73">
-  <span class="val" id="valT">0.73y</span>
+  <input type="range" id="sliderT" min="0.01" max="2" step="0.01" value="0.25">
+  <span class="val" id="valT">0.25y</span>
 </div>
 <div class="ctrl-row">
   <label>Vol (σ)</label>
-  <input type="range" id="sliderV" min="5" max="50" step="1" value="20">
-  <span class="val" id="valV">20%</span>
+  <input type="range" id="sliderV" min="5" max="50" step="1" value="18">
+  <span class="val" id="valV">18%</span>
 </div>
 
 <svg id="chart" width="100%" viewBox="0 0 680 420" style="display:block;"></svg>
@@ -155,7 +155,7 @@ function draw(){
   // axes
   h+=`<line x1="${L}" y1="${B}" x2="${R}" y2="${B}" stroke="${axisCol}" stroke-width="1"/>`;
   h+=`<line x1="${L}" y1="${Top}" x2="${L}" y2="${B}" stroke="${axisCol}" stroke-width="1"/>`;
-  h+=`<text x="${(L+R)/2}" y="${B+34}" text-anchor="middle" fill="${textCol}" font-size="13" font-family="sans-serif">Strike price (K)</text>`;
+  h+=`<text x="${(L+R)/2}" y="${B+34}" text-anchor="middle" fill="${textCol}" font-size="13" font-family="sans-serif">XAUUSD Strike price (K)</text>`;
   h+=`<text x="16" y="${(Top+B)/2}" text-anchor="middle" fill="${textCol}" font-size="13" font-family="sans-serif" transform="rotate(-90,16,${(Top+B)/2})">|Delta|</text>`;
 
   // ATM vertical
@@ -208,10 +208,10 @@ function draw(){
 
     // K labels next to dots
     h+=`<text x="${kx(kCall)+9}" y="${dy(d)-10}" fill="${callCol}" font-size="10" font-family="monospace" font-weight="500">${label}C</text>`;
-    h+=`<text x="${kx(kCall)}" y="${B+16}" text-anchor="middle" fill="${callCol}" font-size="10" font-family="monospace">${kCall.toFixed(1)}</text>`;
+    h+=`<text x="${kx(kCall)}" y="${B+16}" text-anchor="middle" fill="${callCol}" font-size="10" font-family="monospace">${Math.round(kCall)}</text>`;
 
     h+=`<text x="${kx(kPut)-9}" y="${dy(d)-10}" text-anchor="end" fill="${putCol}" font-size="10" font-family="monospace" font-weight="500">${label}P</text>`;
-    h+=`<text x="${kx(kPut)}" y="${B+16}" text-anchor="middle" fill="${putCol}" font-size="10" font-family="monospace">${kPut.toFixed(1)}</text>`;
+    h+=`<text x="${kx(kPut)}" y="${B+16}" text-anchor="middle" fill="${putCol}" font-size="10" font-family="monospace">${Math.round(kPut)}</text>`;
 
     // |delta| label on left
     h+=`<text x="${R+4}" y="${dy(d)+1}" fill="${textCol}" font-size="10" font-family="monospace" dominant-baseline="central" opacity="0.6">${label}</text>`;
@@ -222,7 +222,7 @@ function draw(){
   h+=`<circle cx="${kx(atmK)}" cy="${dy(0.5)}" r="5" fill="${atmCol}" stroke="${dark?'#1a1a18':'#fff'}" stroke-width="2"/>`;
   h+=`<line x1="${kx(atmK)}" y1="${dy(0.5)}" x2="${kx(atmK)}" y2="${B}" stroke="${atmCol}" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>`;
   h+=`<text x="${kx(atmK)+9}" y="${dy(0.5)-10}" fill="${atmCol}" font-size="10" font-family="monospace" font-weight="500">ATM</text>`;
-  h+=`<text x="${kx(atmK)}" y="${B+16}" text-anchor="middle" fill="${atmCol}" font-size="10" font-family="monospace">${atmK.toFixed(1)}</text>`;
+  h+=`<text x="${kx(atmK)}" y="${B+16}" text-anchor="middle" fill="${atmCol}" font-size="10" font-family="monospace">${Math.round(atmK)}</text>`;
 
   svg.innerHTML=h;
 }
