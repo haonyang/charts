@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vol Surface Delta Convention → Strike Mapping</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg2: #f5f5f0;
+    --text: #3d3d3a;
+    --text2: #73726c;
+    --text3: #9c9a92;
+    --border: rgba(0,0,0,0.1);
+    --grid: rgba(0,0,0,0.2);
+    --axis: rgba(0,0,0,0.4);
+    --call: #D85A30;
+    --put: #3A7CA5;
+    --atm: #7F77DD;
+    --marker-bg: rgba(255,255,255,0.85);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --bg2: #2c2c2a;
+      --text: #c2c0b6;
+      --text2: #9c9a92;
+      --text3: #73726c;
+      --border: rgba(255,255,255,0.1);
+      --grid: rgba(255,255,255,0.25);
+      --axis: rgba(255,255,255,0.5);
+      --call: #E8764A;
+      --put: #5BA3CC;
+      --atm: #9B94EE;
+      --marker-bg: rgba(26,26,24,0.85);
+    }
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); padding: 8px 20px; max-width: 720px; margin: 0 auto; -webkit-user-select: none; user-select: none; display:flex; flex-direction:column; }
+  .ctrl-row { display:flex; align-items:center; gap:12px; margin:0 0 4px; font-size:13px; color:var(--text2); flex-shrink:0; }
+  .ctrl-row label { min-width:60px; }
+  .ctrl-row input[type=range] { flex:1; height:4px; -webkit-appearance:none; appearance:none; background:var(--border); border-radius:2px; outline:none; }
+  .ctrl-row input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:var(--bg); border:2px solid var(--text3); cursor:pointer; }
+  .ctrl-row .val { min-width:52px; text-align:right; font-weight:500; font-size:13px; font-family:monospace; color:var(--text); }
+  #chart { flex:1; min-height:0; }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; margin:4px 0 0; font-size:12px; color:var(--text2); flex-shrink:0; }
+  .legend-item { display:flex; align-items:center; gap:5px; }
+</style>
+</head>
+<body>
+
+<div class="ctrl-row">
+  <label>Spot (S)</label>
+  <input type="range" id="sliderS" min="60" max="160" step="1" value="100">
+  <span class="val" id="valS">100</span>
+</div>
+<div class="ctrl-row">
+  <label>Time (T)</label>
+  <input type="range" id="sliderT" min="0.01" max="2" step="0.01" value="0.73">
+  <span class="val" id="valT">0.73y</span>
+</div>
+<div class="ctrl-row">
+  <label>Vol (σ)</label>
+  <input type="range" id="sliderV" min="5" max="50" step="1" value="20">
+  <span class="val" id="valV">20%</span>
+</div>
+
+<svg id="chart" width="100%" viewBox="0 0 680 420" style="display:block;"></svg>
+
+<div class="legend">
+  <div class="legend-item"><div style="width:20px;height:3px;background:var(--call)"></div>Call Δ_C = N(d₁)</div>
+  <div class="legend-item"><div style="width:20px;height:3px;background:var(--put)"></div>Put |Δ_P| = 1 − N(d₁)</div>
+  <div class="legend-item"><div style="width:20px;height:0;border-top:2px dashed var(--atm)"></div>ATM (K ≈ S)</div>
+  <div class="legend-item" style="font-size:11px; color:var(--text3)">Vol surface: same |Δ| → different K</div>
+</div>
+
+<script>
+const r=0.03;
+
+function N(x){
+  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+  const sign=x<0?-1:1;
+  x=Math.abs(x)/Math.SQRT2;
+  const t=1/(1+p*x);
+  const y=1-((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+  return 0.5*(1+sign*y);
+}
+
+// Call delta as function of K (given S, vol, T)
+function callDelta(S,K,vol,T){
+  if(T<0.001) return S>K?1:(S===K?0.5:0);
+  const F=S*Math.exp(r*T);
+  const d1=(Math.log(F/K)+0.5*vol*vol*T)/(vol*Math.sqrt(T));
+  return N(d1);
+}
+
+// Find K for a given call delta target via bisection
+function strikeForCallDelta(S,vol,T,targetDelta){
+  let lo=1, hi=S*5;
+  for(let i=0;i<80;i++){
+    const mid=(lo+hi)/2;
+    const d=callDelta(S,mid,vol,T);
+    if(d>targetDelta) lo=mid; else hi=mid;
+  }
+  return (lo+hi)/2;
+}
+
+// Find K for a given put delta target (put delta = callDelta - 1, so |putDelta| = 1 - callDelta)
+// 25D Put means |Δ_P| = 0.25, so callDelta = 1 - 0.25 = 0.75
+function strikeForPutAbsDelta(S,vol,T,absTarget){
+  return strikeForCallDelta(S,vol,T, 1-absTarget);
+}
+
+function draw(){
+  const S=parseFloat(document.getElementById('sliderS').value);
+  const T=parseFloat(document.getElementById('sliderT').value);
+  const vol=parseFloat(document.getElementById('sliderV').value)/100;
+  document.getElementById('valS').textContent=Math.round(S);
+  document.getElementById('valT').textContent=T.toFixed(2)+'y';
+  document.getElementById('valV').textContent=Math.round(vol*100)+'%';
+
+  const svg=document.getElementById('chart');
+  const dark=matchMedia('(prefers-color-scheme:dark)').matches;
+  const textCol=getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+  const gridCol=getComputedStyle(document.documentElement).getPropertyValue('--grid').trim();
+  const axisCol=getComputedStyle(document.documentElement).getPropertyValue('--axis').trim();
+  const callCol=getComputedStyle(document.documentElement).getPropertyValue('--call').trim();
+  const putCol=getComputedStyle(document.documentElement).getPropertyValue('--put').trim();
+  const atmCol=getComputedStyle(document.documentElement).getPropertyValue('--atm').trim();
+  const markerBg=getComputedStyle(document.documentElement).getPropertyValue('--marker-bg').trim();
+
+  const L=70,R=640,Top=30,B=360;
+  // X-axis: strike K, range adapts to S
+  const kMin=S*0.5, kMax=S*1.6;
+  // Y-axis: |delta| from 0 to 1
+  const kx=k=>L+(k-kMin)/(kMax-kMin)*(R-L);
+  const dy=d=>B-d*(B-Top);
+
+  let h='';
+
+  // grid
+  for(let d=0;d<=1;d+=0.1){
+    const w=d%0.25===0?0.5:0.3;
+    h+=`<line x1="${L}" y1="${dy(d)}" x2="${R}" y2="${dy(d)}" stroke="${gridCol}" stroke-width="${w}"/>`;
+    if(d%0.25===0){
+      h+=`<text x="${L-10}" y="${dy(d)+1}" text-anchor="end" fill="${textCol}" font-size="11" font-family="sans-serif" dominant-baseline="central">${d.toFixed(2)}</text>`;
+    }
+  }
+  const kStep=Math.round((kMax-kMin)/8/5)*5||5;
+  for(let k=Math.ceil(kMin/kStep)*kStep;k<=kMax;k+=kStep){
+    h+=`<line x1="${kx(k)}" y1="${Top}" x2="${kx(k)}" y2="${B}" stroke="${gridCol}" stroke-width="0.5"/>`;
+  }
+
+  // axes
+  h+=`<line x1="${L}" y1="${B}" x2="${R}" y2="${B}" stroke="${axisCol}" stroke-width="1"/>`;
+  h+=`<line x1="${L}" y1="${Top}" x2="${L}" y2="${B}" stroke="${axisCol}" stroke-width="1"/>`;
+  h+=`<text x="${(L+R)/2}" y="${B+34}" text-anchor="middle" fill="${textCol}" font-size="13" font-family="sans-serif">Strike price (K)</text>`;
+  h+=`<text x="16" y="${(Top+B)/2}" text-anchor="middle" fill="${textCol}" font-size="13" font-family="sans-serif" transform="rotate(-90,16,${(Top+B)/2})">|Delta|</text>`;
+
+  // ATM vertical
+  h+=`<line x1="${kx(S)}" y1="${Top}" x2="${kx(S)}" y2="${B}" stroke="${atmCol}" stroke-width="1" stroke-dasharray="5 3" opacity="0.5"/>`;
+  h+=`<text x="${kx(S)}" y="${Top-8}" text-anchor="middle" fill="${atmCol}" font-size="11" font-family="sans-serif" opacity="0.8">S=${Math.round(S)}</text>`;
+
+  // curves: Call delta and |Put delta| vs K
+  const n=400;
+  let callPath='', putPath='';
+  for(let i=0;i<=n;i++){
+    const k=kMin+(kMax-kMin)*i/n;
+    const cd=callDelta(S,k,vol,T);       // call delta: 1→0 as K increases
+    const pd=1-cd;                         // |put delta|: 0→1 as K increases
+    const px=kx(k).toFixed(1);
+    callPath+=(i===0?'M':'L')+px+' '+dy(cd).toFixed(1);
+    putPath+=(i===0?'M':'L')+px+' '+dy(pd).toFixed(1);
+  }
+  h+=`<path d="${callPath}" fill="none" stroke="${callCol}" stroke-width="2.5" stroke-linecap="round"/>`;
+  h+=`<path d="${putPath}" fill="none" stroke="${putCol}" stroke-width="2.5" stroke-linecap="round"/>`;
+
+  // Label curves
+  const labelK_call=kMin+(kMax-kMin)*0.15;
+  const labelK_put=kMin+(kMax-kMin)*0.85;
+  h+=`<text x="${kx(labelK_call)}" y="${dy(callDelta(S,labelK_call,vol,T))-10}" fill="${callCol}" font-size="12" font-family="sans-serif" font-weight="500">Call Δ</text>`;
+  h+=`<text x="${kx(labelK_put)}" y="${dy(1-callDelta(S,labelK_put,vol,T))-10}" fill="${putCol}" font-size="12" font-family="sans-serif" font-weight="500">|Put Δ|</text>`;
+
+  // Standard vol surface delta markers: 10D and 25D
+  const deltas=[
+    {d:0.25, label:'25D'},
+    {d:0.10, label:'10D'},
+  ];
+
+  for(const {d,label} of deltas){
+    // 25D Call: call delta = 0.25 → find K
+    const kCall=strikeForCallDelta(S,vol,T,d);
+    // 25D Put: |put delta| = 0.25 → call delta = 0.75 → find K
+    const kPut=strikeForPutAbsDelta(S,vol,T,d);
+
+    // horizontal dashed line at |delta| = d
+    h+=`<line x1="${L}" y1="${dy(d)}" x2="${R}" y2="${dy(d)}" stroke="${textCol}" stroke-width="0.5" stroke-dasharray="3 4" opacity="0.3"/>`;
+
+    // vertical drop lines from curve intersection to x-axis
+    // Call side
+    h+=`<line x1="${kx(kCall)}" y1="${dy(d)}" x2="${kx(kCall)}" y2="${B}" stroke="${callCol}" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>`;
+    h+=`<circle cx="${kx(kCall)}" cy="${dy(d)}" r="5" fill="${callCol}" stroke="${dark?'#1a1a18':'#fff'}" stroke-width="2"/>`;
+
+    // Put side
+    h+=`<line x1="${kx(kPut)}" y1="${dy(d)}" x2="${kx(kPut)}" y2="${B}" stroke="${putCol}" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>`;
+    h+=`<circle cx="${kx(kPut)}" cy="${dy(d)}" r="5" fill="${putCol}" stroke="${dark?'#1a1a18':'#fff'}" stroke-width="2"/>`;
+
+    // K labels next to dots
+    h+=`<text x="${kx(kCall)+9}" y="${dy(d)-10}" fill="${callCol}" font-size="10" font-family="monospace" font-weight="500">${label}C</text>`;
+    h+=`<text x="${kx(kCall)}" y="${B+16}" text-anchor="middle" fill="${callCol}" font-size="10" font-family="monospace">${kCall.toFixed(1)}</text>`;
+
+    h+=`<text x="${kx(kPut)-9}" y="${dy(d)-10}" text-anchor="end" fill="${putCol}" font-size="10" font-family="monospace" font-weight="500">${label}P</text>`;
+    h+=`<text x="${kx(kPut)}" y="${B+16}" text-anchor="middle" fill="${putCol}" font-size="10" font-family="monospace">${kPut.toFixed(1)}</text>`;
+
+    // |delta| label on left
+    h+=`<text x="${R+4}" y="${dy(d)+1}" fill="${textCol}" font-size="10" font-family="monospace" dominant-baseline="central" opacity="0.6">${label}</text>`;
+  }
+
+  // ATM marker (delta ≈ 0.5)
+  const atmK=strikeForCallDelta(S,vol,T,0.5);
+  h+=`<circle cx="${kx(atmK)}" cy="${dy(0.5)}" r="5" fill="${atmCol}" stroke="${dark?'#1a1a18':'#fff'}" stroke-width="2"/>`;
+  h+=`<line x1="${kx(atmK)}" y1="${dy(0.5)}" x2="${kx(atmK)}" y2="${B}" stroke="${atmCol}" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>`;
+  h+=`<text x="${kx(atmK)+9}" y="${dy(0.5)-10}" fill="${atmCol}" font-size="10" font-family="monospace" font-weight="500">ATM</text>`;
+  h+=`<text x="${kx(atmK)}" y="${B+16}" text-anchor="middle" fill="${atmCol}" font-size="10" font-family="monospace">${atmK.toFixed(1)}</text>`;
+
+  svg.innerHTML=h;
+}
+
+document.getElementById('sliderS').addEventListener('input',draw);
+document.getElementById('sliderT').addEventListener('input',draw);
+document.getElementById('sliderV').addEventListener('input',draw);
+requestAnimationFrame(function(){ setTimeout(draw, 50); });
+</script>
+</body>
+</html>
