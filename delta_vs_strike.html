@@ -65,12 +65,17 @@
   <input type="range" id="sliderV" min="5" max="50" step="1" value="18">
   <span class="val" id="valV">18%</span>
 </div>
+<div class="ctrl-row">
+  <label>Lease (q)</label>
+  <input type="range" id="sliderQ" min="0" max="5" step="0.1" value="1.5">
+  <span class="val" id="valQ">1.50%</span>
+</div>
 
 <svg id="chart" width="100%" viewBox="0 0 680 420" style="display:block;"></svg>
 
 <div class="legend">
-  <div class="legend-item"><div style="width:20px;height:3px;background:var(--call)"></div>Call Δ_C = N(d₁)</div>
-  <div class="legend-item"><div style="width:20px;height:3px;background:var(--put)"></div>Put |Δ_P| = 1 − N(d₁)</div>
+  <div class="legend-item"><div style="width:20px;height:3px;background:var(--call)"></div>Call Δ = e⁻ᑫᵀ·N(d₁)</div>
+  <div class="legend-item"><div style="width:20px;height:3px;background:var(--put)"></div>Put |Δ| = e⁻ᑫᵀ·N(−d₁)</div>
   <div class="legend-item"><div style="width:20px;height:0;border-top:2px dashed var(--atm)"></div>ATM (K ≈ S)</div>
   <div class="legend-item" style="font-size:11px; color:var(--text3)">Vol surface: same |Δ| → different K</div>
 </div>
@@ -87,38 +92,51 @@ function N(x){
   return 0.5*(1+sign*y);
 }
 
-// Call delta as function of K (given S, vol, T)
-function callDelta(S,K,vol,T){
+// Spot delta for call: e^{-qT} * N(d1), where F = S * e^{(r-q)T}
+function callDelta(S,K,vol,T,q){
   if(T<0.001) return S>K?1:(S===K?0.5:0);
-  const F=S*Math.exp(r*T);
+  const F=S*Math.exp((r-q)*T);
   const d1=(Math.log(F/K)+0.5*vol*vol*T)/(vol*Math.sqrt(T));
-  return N(d1);
+  return Math.exp(-q*T)*N(d1);
+}
+
+// Spot delta for put: e^{-qT} * (N(d1) - 1) = callDelta - e^{-qT}
+// |putDelta| = e^{-qT} - callDelta
+function putAbsDelta(S,K,vol,T,q){
+  return Math.exp(-q*T)-callDelta(S,K,vol,T,q);
 }
 
 // Find K for a given call delta target via bisection
-function strikeForCallDelta(S,vol,T,targetDelta){
+function strikeForCallDelta(S,vol,T,q,targetDelta){
   let lo=1, hi=S*5;
   for(let i=0;i<80;i++){
     const mid=(lo+hi)/2;
-    const d=callDelta(S,mid,vol,T);
+    const d=callDelta(S,mid,vol,T,q);
     if(d>targetDelta) lo=mid; else hi=mid;
   }
   return (lo+hi)/2;
 }
 
-// Find K for a given put delta target (put delta = callDelta - 1, so |putDelta| = 1 - callDelta)
-// 25D Put means |Δ_P| = 0.25, so callDelta = 1 - 0.25 = 0.75
-function strikeForPutAbsDelta(S,vol,T,absTarget){
-  return strikeForCallDelta(S,vol,T, 1-absTarget);
+// Find K for a given |put delta| target via bisection
+function strikeForPutAbsDelta(S,vol,T,q,absTarget){
+  let lo=1, hi=S*5;
+  for(let i=0;i<80;i++){
+    const mid=(lo+hi)/2;
+    const pd=putAbsDelta(S,mid,vol,T,q);
+    if(pd<absTarget) lo=mid; else hi=mid;
+  }
+  return (lo+hi)/2;
 }
 
 function draw(){
   const S=parseFloat(document.getElementById('sliderS').value);
   const T=parseFloat(document.getElementById('sliderT').value);
   const vol=parseFloat(document.getElementById('sliderV').value)/100;
+  const q=parseFloat(document.getElementById('sliderQ').value)/100;
   document.getElementById('valS').textContent=Math.round(S);
   document.getElementById('valT').textContent=T.toFixed(2)+'y';
   document.getElementById('valV').textContent=Math.round(vol*100)+'%';
+  document.getElementById('valQ').textContent=(q*100).toFixed(2)+'%';
 
   const svg=document.getElementById('chart');
   const dark=matchMedia('(prefers-color-scheme:dark)').matches;
@@ -167,8 +185,8 @@ function draw(){
   let callPath='', putPath='';
   for(let i=0;i<=n;i++){
     const k=kMin+(kMax-kMin)*i/n;
-    const cd=callDelta(S,k,vol,T);       // call delta: 1→0 as K increases
-    const pd=1-cd;                         // |put delta|: 0→1 as K increases
+    const cd=callDelta(S,k,vol,T,q);
+    const pd=putAbsDelta(S,k,vol,T,q);
     const px=kx(k).toFixed(1);
     callPath+=(i===0?'M':'L')+px+' '+dy(cd).toFixed(1);
     putPath+=(i===0?'M':'L')+px+' '+dy(pd).toFixed(1);
@@ -179,8 +197,8 @@ function draw(){
   // Label curves
   const labelK_call=kMin+(kMax-kMin)*0.15;
   const labelK_put=kMin+(kMax-kMin)*0.85;
-  h+=`<text x="${kx(labelK_call)}" y="${dy(callDelta(S,labelK_call,vol,T))-10}" fill="${callCol}" font-size="12" font-family="sans-serif" font-weight="500">Call Δ</text>`;
-  h+=`<text x="${kx(labelK_put)}" y="${dy(1-callDelta(S,labelK_put,vol,T))-10}" fill="${putCol}" font-size="12" font-family="sans-serif" font-weight="500">|Put Δ|</text>`;
+  h+=`<text x="${kx(labelK_call)}" y="${dy(callDelta(S,labelK_call,vol,T,q))-10}" fill="${callCol}" font-size="12" font-family="sans-serif" font-weight="500">Call Δ</text>`;
+  h+=`<text x="${kx(labelK_put)}" y="${dy(putAbsDelta(S,labelK_put,vol,T,q))-10}" fill="${putCol}" font-size="12" font-family="sans-serif" font-weight="500">|Put Δ|</text>`;
 
   // Standard vol surface delta markers: 10D and 25D
   const deltas=[
@@ -190,9 +208,9 @@ function draw(){
 
   for(const {d,label} of deltas){
     // 25D Call: call delta = 0.25 → find K
-    const kCall=strikeForCallDelta(S,vol,T,d);
-    // 25D Put: |put delta| = 0.25 → call delta = 0.75 → find K
-    const kPut=strikeForPutAbsDelta(S,vol,T,d);
+    const kCall=strikeForCallDelta(S,vol,T,q,d);
+    // 25D Put: |put delta| = 0.25 → find K
+    const kPut=strikeForPutAbsDelta(S,vol,T,q,d);
 
     // horizontal dashed line at |delta| = d
     h+=`<line x1="${L}" y1="${dy(d)}" x2="${R}" y2="${dy(d)}" stroke="${textCol}" stroke-width="0.5" stroke-dasharray="3 4" opacity="0.3"/>`;
@@ -217,11 +235,12 @@ function draw(){
     h+=`<text x="${R+4}" y="${dy(d)+1}" fill="${textCol}" font-size="10" font-family="monospace" dominant-baseline="central" opacity="0.6">${label}</text>`;
   }
 
-  // ATM marker (delta ≈ 0.5)
-  const atmK=strikeForCallDelta(S,vol,T,0.5);
-  h+=`<circle cx="${kx(atmK)}" cy="${dy(0.5)}" r="5" fill="${atmCol}" stroke="${dark?'#1a1a18':'#fff'}" stroke-width="2"/>`;
-  h+=`<line x1="${kx(atmK)}" y1="${dy(0.5)}" x2="${kx(atmK)}" y2="${B}" stroke="${atmCol}" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>`;
-  h+=`<text x="${kx(atmK)+9}" y="${dy(0.5)-10}" fill="${atmCol}" font-size="10" font-family="monospace" font-weight="500">ATM</text>`;
+  // ATM marker — ATM-forward-delta-neutral: call delta = 0.5 * e^{-qT}
+  const atmTarget=0.5*Math.exp(-q*T);
+  const atmK=strikeForCallDelta(S,vol,T,q,atmTarget);
+  h+=`<circle cx="${kx(atmK)}" cy="${dy(atmTarget)}" r="5" fill="${atmCol}" stroke="${dark?'#1a1a18':'#fff'}" stroke-width="2"/>`;
+  h+=`<line x1="${kx(atmK)}" y1="${dy(atmTarget)}" x2="${kx(atmK)}" y2="${B}" stroke="${atmCol}" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>`;
+  h+=`<text x="${kx(atmK)+9}" y="${dy(atmTarget)-10}" fill="${atmCol}" font-size="10" font-family="monospace" font-weight="500">ATM</text>`;
   h+=`<text x="${kx(atmK)}" y="${B+16}" text-anchor="middle" fill="${atmCol}" font-size="10" font-family="monospace">${Math.round(atmK)}</text>`;
 
   svg.innerHTML=h;
@@ -230,6 +249,7 @@ function draw(){
 document.getElementById('sliderS').addEventListener('input',draw);
 document.getElementById('sliderT').addEventListener('input',draw);
 document.getElementById('sliderV').addEventListener('input',draw);
+document.getElementById('sliderQ').addEventListener('input',draw);
 requestAnimationFrame(function(){ setTimeout(draw, 50); });
 </script>
 </body>
